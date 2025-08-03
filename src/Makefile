@@ -185,6 +185,7 @@ SUBDIRS := \
     emc/motion emc/ini emc/rs274ngc emc/sai emc/pythonplugin \
     emc/motion-logger \
     emc/tooldata \
+    emc/sterp \
     emc \
     \
     module_helper \

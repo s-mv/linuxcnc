@@ -1,0 +1,13 @@
+.cache
+.vscode
+
+build/*
+output/*
+
+compile_commands.json
+.data.txt
+examples/test.cnc
+
+sterp.ii
+extern/antlr/*.jar
+

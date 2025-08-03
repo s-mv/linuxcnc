@@ -1,0 +1,8 @@
+; import "./sterp_include.can"
+
+s400 m3 g21 g91
+for #1 from 0 to 10
+  g1 x1 y1 z1
+  ; m98 p200 
+end
+

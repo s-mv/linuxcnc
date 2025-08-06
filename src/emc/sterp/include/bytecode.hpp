@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <deque>
+#include <set>
 #include <stack>
 #include <string>
 #include <unordered_map>
@@ -110,7 +111,7 @@ private:
 
   std::stack<gpp::ExecutionFrame> executionStack;
   std::unordered_map<std::string, std::shared_ptr<ParsedImport>> importedFiles;
-  std::unordered_map<u64, parser_antlr4::SubroutineContext *> subroutines;
+  std::set<std::string> preprocessingPaths;
 
   std::unordered_map<std::string, f64> parameterAddresses;
   bool breakEncountered = false;
@@ -185,6 +186,7 @@ private:
   antlrcpp::Any visitPrimary(parser_antlr4::PrimaryContext *context) override;
 
   //   helpers
+  void preprocessImport(parser_antlr4::Import_statementContext *context);
   std::string getLineFromSource(int target);
   bool arcOffetsAligned(const Plane currentPlane, f64 i, f64 j, f64 k);
   void handle_g(std::deque<VerboseInstruction> &list, f64 arg,

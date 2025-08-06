@@ -21,7 +21,7 @@
 #include <stack>
 #include <stdio.h>
 #include <string.h>
-#include <string>
+#include <unordered_set>
 #include <variant>
 
 #include "hal.h"
@@ -49,6 +49,8 @@ void releaseLock();
 
 class Sterp : public InterpBase {
   friend class gpp::Machine;
+
+  std::unordered_set<std::string> currentlyImporting;
 
 public:
   Sterp() : f(0) {
@@ -98,6 +100,8 @@ enum ControlToken {
   control_for,
   control_do,
   control_end,
+  control_subroutine,
+  control_subroutine_end,
 };
 
 using ControlStack = std::stack<ControlToken>;
@@ -139,7 +143,12 @@ int Sterp::ini_load(const char *inifile) {
 int Sterp::read(const char *line) {
   std::cout << "STERP: read(line=" << line << ")\n";
 
-  currentLine = line;
+  std::string inputLine = line;
+
+  inputLine.erase(0, inputLine.find_first_not_of(" \t\r\n"));
+  inputLine.erase(inputLine.find_last_not_of(" \t\r\n") + 1);
+
+  currentLine = inputLine;
 
   return INTERP_OK;
 }
@@ -188,62 +197,6 @@ int Sterp::execute(const char *line) {
   std::cout << "STERP: line is not empty or null.\n";
   lineStr += "\n";
 
-  if (startsWith(lineStr, "import ")) {
-    std::cout << "STERP: Intercepting import statement\n";
-
-    size_t firstQuote = lineStr.find('"');
-    size_t lastQuote = lineStr.rfind('"');
-
-    if (firstQuote != std::string::npos && lastQuote != std::string::npos &&
-        firstQuote != lastQuote) {
-      std::string filename =
-          lineStr.substr(firstQuote + 1, lastQuote - firstQuote - 1);
-      std::cout << "STERP: Importing file: " << filename << "\n";
-
-      try {
-        std::filesystem::path canonicalPath =
-            std::filesystem::canonical(filename);
-        std::string canonicalStr = canonicalPath.string();
-
-        static std::set<std::string> currentlyImporting;
-        if (currentlyImporting.count(canonicalStr)) {
-          std::cerr << "STERP: ERROR: Circular import detected for "
-                    << canonicalStr << "\n";
-          return INTERP_ERROR;
-        }
-
-        std::ifstream file(canonicalStr);
-        if (!file) {
-          std::cerr << "STERP: ERROR: Could not open import file: "
-                    << canonicalStr << "\n";
-          return INTERP_ERROR;
-        }
-
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        std::string fileContents = buffer.str();
-
-        currentlyImporting.insert(canonicalStr);
-
-        std::cout << "STERP: Replacing import statement with file contents inline\n";
-
-        
-        
-        currentlyImporting.erase(canonicalStr);
-
-        return INTERP_OK;
-      } catch (const std::exception &e) {
-        std::cerr << "STERP: ERROR: Failed to process import: " << e.what()
-                  << "\n";
-        return INTERP_ERROR;
-      }
-    } else {
-      std::cerr << "STERP: ERROR: Malformed import statement: " << lineStr
-                << "\n";
-      return INTERP_ERROR;
-    }
-  }
-
   if (startsWith(lineStr, "if")) {
     controlStack.push(control_if);
     controlSequence += lineStr;
@@ -259,6 +212,17 @@ int Sterp::execute(const char *line) {
   } else if (startsWith(lineStr, "do")) {
     controlStack.push(control_do);
     controlSequence += lineStr;
+  } else if (startsWith(lineStr, "o") && std::isdigit(lineStr[1])) {
+    controlStack.push(control_subroutine);
+    controlSequence += lineStr;
+  }
+
+  if (endsWith(lineStr, "m99\n")) {
+    if (!controlStack.empty())
+      controlStack.pop();
+    controlSequence += lineStr;
+    lineStr = controlSequence;
+    controlSequence.clear();
   }
 
   if (endsWith(lineStr, "end\n") || endsWith(lineStr, "endif\n") ||

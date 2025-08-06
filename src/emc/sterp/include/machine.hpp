@@ -125,13 +125,14 @@ struct gpp::Vec2D {
 struct gpp::Machine {
   friend class BytecodeEmitter;
   friend class Sterp;
-
-private:
+  
+  private:
   std::shared_ptr<BytecodeEmitter> emitter;
   std::shared_ptr<BytecodeEmitter> emitterStash;
   bool emitterStashed;
-
-public:
+  
+  public:
+  std::unordered_map<u64, parser_antlr4::SubroutineContext *> subroutines;
   Vec3D position;       // current position relative to (0, 0, 0)
   Vec3D g5xoffset;      // offset from the origin due to g54-g59
   Vec3D g92offset;      // offset from the origin due to g92/g52

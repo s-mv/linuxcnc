@@ -103,7 +103,7 @@ $(THISDIR)build/%.o: $(THISDIR)src/%.cpp
 
 clean:
 	rm -rf ${OBJECTS} $(ANTLR4_OBJECTS) $(THISDIR)build/unit.o $(THISDIR)build/unit \
-		$(THISDIR)build/regression $(THISDIR)build/regression.o $(EXTERN)antlr4/gen/* $(THISDIR)build/$(TITLE)
+		$(THISDIR)build/regression $(THISDIR)build/regression.o $(THISDIR)build/$(TITLE)
 
 name ?= newfile
 new:

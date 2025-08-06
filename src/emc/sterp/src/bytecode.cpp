@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 
@@ -53,8 +55,10 @@ void gpp::BytecodeEmitter::preprocess(parser_antlr4::BlockContext *block) {
     if (statement->subroutine()) {
       parser_antlr4::SubroutineContext *subroutine = statement->subroutine();
       f64 address = std::any_cast<f64>(visit(subroutine->real_value()));
-      subroutines.insert({address, subroutine});
+      machine->subroutines.insert({address, subroutine});
       preprocess(subroutine->block());
+    } else if (statement->import_statement()) {
+      preprocessImport(statement->import_statement());
     } else if (statement->if_statement()) {
       for (auto block : statement->if_statement()->block()) {
         preprocess(block);
@@ -67,6 +71,45 @@ void gpp::BytecodeEmitter::preprocess(parser_antlr4::BlockContext *block) {
       preprocess(statement->for_statement()->block());
     }
   }
+}
+
+void gpp::BytecodeEmitter::preprocessImport(parser_antlr4::Import_statementContext *context) {
+  std::string raw = context->FILENAME()->getText();
+  std::string pathStr = raw.substr(1, raw.length() - 2); // remove quotes
+
+  std::filesystem::path canonicalPath = std::filesystem::canonical(pathStr);
+  std::string canonicalStr = canonicalPath.string();
+
+  if (preprocessingPaths.count(canonicalStr)) {
+    return;
+  }
+
+  if (importedFiles.count(canonicalStr)) {
+    return;
+  }
+
+  preprocessingPaths.insert(canonicalStr);
+
+  std::ifstream file(canonicalStr);
+  if (!file) {
+    throw std::runtime_error("Could not open import file: " + canonicalStr);
+  }
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+
+  auto parsed = std::make_shared<ParsedImport>();
+  parsed->fileContents = buffer.str();
+  parsed->inputStream = std::make_unique<antlr4::ANTLRInputStream>(parsed->fileContents);
+  parsed->lexer = std::make_unique<lexer_antlr4>(parsed->inputStream.get());
+  parsed->tokens = std::make_unique<antlr4::CommonTokenStream>(parsed->lexer.get());
+  parsed->parser = std::make_unique<parser_antlr4>(parsed->tokens.get());
+  parsed->block = parsed->parser->block();
+
+  importedFiles.insert({canonicalStr, parsed});
+
+  preprocess(parsed->block);
+
+  preprocessingPaths.erase(canonicalStr);
 }
 
 bool gpp::BytecodeEmitter::fetchInstructions() {
@@ -136,7 +179,7 @@ bool gpp::BytecodeEmitter::fetchInstructions() {
       }
 
       continue;
-    }
+  }
 
     if (frame.linePointer >= statements.size()) {
       if (!frame.loopCounterAddress.empty()) {
@@ -181,35 +224,17 @@ antlrcpp::Any gpp::BytecodeEmitter::visitImport_statement(
   std::filesystem::path canonicalPath = std::filesystem::canonical(pathStr);
   std::string canonicalStr = canonicalPath.string();
 
-  if (importedFiles.count(canonicalStr)) {
+  if (!importedFiles.count(canonicalStr)) {
     bytecode.push_back(gpp::Error(ErrorType::GENERAL_ERROR,
-                                  "Circular import detected!",
+                                  "Import not found during preprocessing!",
                                   getLineFromSource(line), line, column));
     return nullptr;
   }
 
-  // Read file contents
-  std::ifstream file(canonicalStr);
-  if (!file) {
-    throw std::runtime_error("Could not open import file: " + canonicalStr);
-  }
-  std::stringstream buffer;
-  buffer << file.rdbuf();
-
-  auto parsed = std::make_shared<ParsedImport>();
-  parsed->fileContents = buffer.str();
-
-  parsed->inputStream =
-      std::make_unique<antlr4::ANTLRInputStream>(parsed->fileContents);
-  parsed->lexer = std::make_unique<lexer_antlr4>(parsed->inputStream.get());
-  parsed->tokens =
-      std::make_unique<antlr4::CommonTokenStream>(parsed->lexer.get());
-  parsed->parser = std::make_unique<parser_antlr4>(parsed->tokens.get());
-  parsed->block = parsed->parser->block();
-
-  importedFiles.insert({canonicalStr, parsed});
-
-  executionStack.push({.block = parsed->block, .linePointer = 0});
+  executionStack.push({
+    .block = importedFiles[canonicalStr]->block,
+    .linePointer = 0
+  });
 
   return nullptr;
 }
@@ -240,7 +265,7 @@ antlrcpp::Any gpp::BytecodeEmitter::visitSubroutine(
   subroutineEncountered = true;
 
   f64 address = std::any_cast<f64>(visit(context->real_value()));
-  subroutines.insert({address, context});
+  machine->subroutines.insert({address, context});
 
   subroutineEncountered = false;
 
@@ -551,4 +576,3 @@ i64 parseNumbered(const std::string &address) {
 bool isLocalNamed(const std::string &address) {
   return !address.empty() && !isNumbered(address) && address.at(0) != '_';
 }
-

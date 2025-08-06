@@ -12,6 +12,7 @@
 #include "gpp.hpp"
 #include "util.hpp"
 
+
 gpp::Machine::Machine()
     : input("\n"), canvasXY(0, 0), canvasYZ(0, 0), canvasXZ(0, 0) {
   emitter = std::make_shared<BytecodeEmitter>(*this);
